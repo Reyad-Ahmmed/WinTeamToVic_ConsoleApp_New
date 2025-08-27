@@ -346,200 +346,208 @@ namespace WinTeamToVic_ConsoleApp.Service
             {
                 foreach (VendorModel vendor in vendors)
                 {
-                    // get single vendor
-                    var singleVendor = await GetSingleVendor(vendor.VendorNumber);
-                    var countryCode = "";
-                    object requestBody = null;
-                    
-                    var uri = "";
-
-                    if (singleVendor.CustomFields.Count > 0)
+                    try
                     {
-                        var vendorCountryCode = singleVendor.CustomFields.Where(x => x.FieldNumber == 2).FirstOrDefault();
-                        
-                        if (vendorCountryCode != null)
+                        // get single vendor
+                        var singleVendor = await GetSingleVendor(vendor.VendorNumber);
+                        var countryCode = "";
+                        object requestBody = null;
+
+                        var uri = "";
+
+                        if (singleVendor.CustomFields.Count > 0)
                         {
-                            int countryCodeId = int.Parse(vendorCountryCode.Value);
-                            var VendorCountryCode = _winteamAPIService.GetCountryCodes(countryCodeId);
+                            var vendorCountryCode = singleVendor.CustomFields.Where(x => x.FieldNumber == 2).FirstOrDefault();
 
-                            uri = _baseAddressForUAT + _vendorUrl + vendor.VendorNumber;
-                            Utils.LogToFile(3, "[INFO]", $"Request uri: {uri}");
-                            
-                            countryCode = VendorCountryCode?.ISOCode;
-
-                            requestBody = new
+                            if (vendorCountryCode != null)
                             {
-                                externalId = $"{vendor.VendorNumber}",
-                                externalUpdatedAt = USATimeModel.GetUSATime().ToString("yyyy-MM-ddTHH:mm:ss.fff"),
-                                name = vendor.VendorName,
-                                phone = vendor.Phone,
-                                addressStreet = vendor.Address?.Address1,
-                                addressCity = vendor.Address?.City,
-                                addressState = vendor.Address?.State,
-                                addressPostalCode = vendor.Address?.Zip,
-                                state = vendor.VendorStatus,
-                                countryCode = countryCode
-                            };
+                                int countryCodeId = int.Parse(vendorCountryCode.Value);
+                                var VendorCountryCode = _winteamAPIService.GetCountryCodes(countryCodeId);
+
+                                uri = _baseAddressForUAT + _vendorUrl + vendor.VendorNumber;
+                                Utils.LogToFile(3, "[INFO]", $"Request uri: {uri}");
+
+                                countryCode = VendorCountryCode?.ISOCode;
+
+                                requestBody = new
+                                {
+                                    externalId = $"{vendor.VendorNumber}",
+                                    externalUpdatedAt = USATimeModel.GetUSATime().ToString("yyyy-MM-ddTHH:mm:ss.fff"),
+                                    name = vendor.VendorName,
+                                    phone = vendor.Phone,
+                                    addressStreet = vendor.Address?.Address1,
+                                    addressCity = vendor.Address?.City,
+                                    addressState = vendor.Address?.State,
+                                    addressPostalCode = vendor.Address?.Zip,
+                                    state = vendor.VendorStatus,
+                                    countryCode = countryCode
+                                };
+                            }
+
                         }
-                        
-                    }
-                    
 
-                    // Serialize the object to JSON
-                    var json = JsonConvert.SerializeObject(requestBody, Formatting.Indented);
-                    Utils.LogToFile(3, "[INFO]", $"Request body: {json}");
 
-                    // Serialize the request body to JSON
-                    var content = new StringContent(json, Encoding.UTF8, "application/json");
+                        // Serialize the object to JSON
+                        var json = JsonConvert.SerializeObject(requestBody, Formatting.Indented);
+                        Utils.LogToFile(3, "[INFO]", $"Request body: {json}");
 
-                    _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                        // Serialize the request body to JSON
+                        var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                    var response = await _httpClient.PutAsync(uri, content);
+                        _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
-                    // create log msg object
-                    StringBuilder msgForLog = new StringBuilder();
+                        var response = await _httpClient.PutAsync(uri, content);
 
-                    // create vendor response object
-                    VendorResponseModel vendorResponse = new VendorResponseModel();
+                        // create log msg object
+                        StringBuilder msgForLog = new StringBuilder();
 
-                    // create vic service log object
-                    var vicServiceLog = new VicServiceLog();
+                        // create vendor response object
+                        VendorResponseModel vendorResponse = new VendorResponseModel();
 
-                    if (response.IsSuccessStatusCode)
-                    {
-                        var responseData = await response.Content.ReadAsStringAsync();
-                        Utils.LogToFile(3, "[INFO]", $"Response body: {responseData}");
+                        // create vic service log object
+                        var vicServiceLog = new VicServiceLog();
 
-                        try
+                        if (response.IsSuccessStatusCode)
                         {
-                            vendorResponse = JsonConvert.DeserializeObject<VendorResponseModel>(responseData);
-                            vicServiceLog.Status = true;
-                            vicServiceLog.VicResponse = responseData;
+                            var responseData = await response.Content.ReadAsStringAsync();
+                            Utils.LogToFile(3, "[INFO]", $"Response body: {responseData}");
+
+                            try
+                            {
+                                vendorResponse = JsonConvert.DeserializeObject<VendorResponseModel>(responseData);
+                                vicServiceLog.Status = true;
+                                vicServiceLog.VicResponse = responseData;
+                            }
+                            catch (Exception ex)
+                            {
+                                msgForLog.AppendLine("Vendor reponse parse error.");
+                                msgForLog.AppendLine(ex.Message);
+                                vicServiceLog.Status = false;
+                                vicServiceLog.VicResponse = msgForLog.ToString();
+
+                                Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, stack trace: {ex.StackTrace}");
+                            }
+
+                            if (isUpdate > 0)
+                            {
+                                msgForLog.AppendLine($"Successfully updated the vendor. Vendor number: {vendor.VendorNumber}.");
+                            }
+                            else
+                            {
+                                msgForLog.AppendLine($"Successfully added the vendor. Vendor number: {vendor.VendorNumber}.");
+
+                            }
+
                         }
-                        catch (Exception ex)
+                        else
                         {
-                            msgForLog.AppendLine("Vendor reponse parse error.");
-                            msgForLog.AppendLine(ex.Message);
+                            Console.WriteLine($"Vendor number: {vendor.VendorNumber}");
+                            Console.WriteLine(response.ReasonPhrase);
+
+                            // error log
+                            var responseBody = await response.Content.ReadAsStringAsync();
+                            //var errors = JArray.Parse(responseBody);
+
+                            // error log
+                            if (isUpdate > 0)
+                            {
+                                msgForLog.AppendLine($"Failed to updated the vendor. Error msg: {responseBody}");
+                            }
+                            else
+                            {
+                                msgForLog.AppendLine($"Failed to added the vendor. Error msg: {responseBody}");
+                            }
+
                             vicServiceLog.Status = false;
-                            vicServiceLog.VicResponse = msgForLog.ToString();
-
-                            Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, stack trace: {ex.StackTrace}");
+                            vicServiceLog.VicResponse = responseBody;
                         }
 
+
+                        vicServiceLog.InternalId = vendorResponse.InternalId;
+                        vicServiceLog.ObjectType = "Vendor";
+                        vicServiceLog.SourceType = sourceType;
+                        vicServiceLog.VicRequest = json;
+                        vicServiceLog.SentDate = USATimeModel.GetUSATime().ToString("MM-dd-yyyy hh:mm:ss tt");
+                        vicServiceLog.ExternalId = vendorResponse.ExternalId;
+                        vicServiceLog.Note = msgForLog.ToString();
+                        vicServiceLog.DestinationENV = env;
+
+                        // save vic service log
                         if (isUpdate > 0)
                         {
-                            msgForLog.AppendLine($"Successfully updated the vendor. Vendor number: {vendor.VendorNumber}.");
+                            // vendor check 
+                            var existingVendor = vicServiceLogs.Where(x => x.ExternalId == vendor.VendorNumber.ToString()).FirstOrDefault();
+                            Utils.LogToFile(3, "[INFO]", $"Vendor number: {existingVendor?.ExternalId}, vic vendor id: {existingVendor.InternalId}");
+
+                            vicServiceLog.Id = existingVendor.Id;
+                            _dal.UpdateVicServiceLog(vicServiceLog);
                         }
                         else
                         {
-                            msgForLog.AppendLine($"Successfully added the vendor. Vendor number: {vendor.VendorNumber}.");
+                            _dal.SaveVicServiceLog(vicServiceLog);
 
-                        }
+                            // save vendor tag task
 
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Vendor number: {vendor.VendorNumber}");
-                        Console.WriteLine(response.ReasonPhrase);
+                            // vendor single api call for check if vendor have tag
+                            var vendorData = await GetSingleVendor(vendor.VendorNumber);
 
-                        // error log
-                        var responseBody = await response.Content.ReadAsStringAsync();
-                        //var errors = JArray.Parse(responseBody);
-
-                        // error log
-                        if (isUpdate > 0)
-                        {
-                            msgForLog.AppendLine($"Failed to updated the vendor. Error msg: {responseBody}");
-                        }
-                        else
-                        {
-                            msgForLog.AppendLine($"Failed to added the vendor. Error msg: {responseBody}");
-                        }
-
-                        vicServiceLog.Status = false;
-                        vicServiceLog.VicResponse = responseBody;
-                    }
-
-
-                    vicServiceLog.InternalId = vendorResponse.InternalId;
-                    vicServiceLog.ObjectType = "Vendor";
-                    vicServiceLog.SourceType = sourceType;
-                    vicServiceLog.VicRequest = json;
-                    vicServiceLog.SentDate = USATimeModel.GetUSATime().ToString("MM-dd-yyyy hh:mm:ss tt");
-                    vicServiceLog.ExternalId = vendorResponse.ExternalId;
-                    vicServiceLog.Note = msgForLog.ToString();
-                    vicServiceLog.DestinationENV = env;
-
-                    // save vic service log
-                    if (isUpdate > 0)
-                    {
-                        // vendor check 
-                        var existingVendor = vicServiceLogs.Where(x => x.ExternalId == vendor.VendorNumber.ToString()).FirstOrDefault();
-                        Utils.LogToFile(3, "[INFO]", $"Vendor number: {existingVendor?.ExternalId}, vic vendor id: {existingVendor.InternalId}");
-
-                        vicServiceLog.Id = existingVendor.Id;
-                        _dal.UpdateVicServiceLog(vicServiceLog);
-                    }
-                    else
-                    {
-                        _dal.SaveVicServiceLog(vicServiceLog);
-
-                        // save vendor tag task
-
-                        // vendor single api call for check if vendor have tag
-                        var vendorData = await GetSingleVendor(vendor.VendorNumber);
-
-                        if (vendorData != null)
-                        {
-                            var vendorTag = vendorData.CustomFields.Where(x => x.FieldNumber == 1).FirstOrDefault();
-
-                            if (vendorTag != null)
+                            if (vendorData != null)
                             {
-                                // check tag if already have vic.ai vendor tag
-                                var vicVendorTags = await GetVendorTags(token);
+                                var vendorTag = vendorData.CustomFields.Where(x => x.FieldNumber == 1).FirstOrDefault();
 
-                                var tagIdFromWinTeam = vendorTag.Value.Trim();
-
-                                string tagValue = "";
-
-                                if (int.TryParse(tagIdFromWinTeam, out var id))
+                                if (vendorTag != null)
                                 {
-                                    var singleVendorTag = _vendorTagService.GetVendorTag(id);
-                                    tagValue = singleVendorTag?.Description?.ToUpper();
-                                }
-                                else
-                                {
-                                    Utils.LogToFile(3, "[INFO]", $"Invalid tag id. Return value: {tagIdFromWinTeam}");
-                                    Console.WriteLine($"Invalid tag ID format: {tagIdFromWinTeam}");
+                                    // check tag if already have vic.ai vendor tag
+                                    var vicVendorTags = await GetVendorTags(token);
 
-                                    tagValue = vendorTag.Value.Trim();
-                                }
+                                    var tagIdFromWinTeam = vendorTag.Value.Trim();
 
-                                //var singleVendorTag = _vendorTagService.GetVendorTag(int.Parse(vendorTag.Value));
+                                    string tagValue = "";
+
+                                    if (int.TryParse(tagIdFromWinTeam, out var id))
+                                    {
+                                        var singleVendorTag = _vendorTagService.GetVendorTag(id);
+                                        tagValue = singleVendorTag?.Description?.ToUpper();
+                                    }
+                                    else
+                                    {
+                                        Utils.LogToFile(3, "[INFO]", $"Invalid tag id. Return value: {tagIdFromWinTeam}");
+                                        Console.WriteLine($"Invalid tag ID format: {tagIdFromWinTeam}");
+
+                                        tagValue = vendorTag.Value.Trim();
+                                    }
+
+                                    //var singleVendorTag = _vendorTagService.GetVendorTag(int.Parse(vendorTag.Value));
 
 
-                                var isExistVendorTag = vicVendorTags.Where(x => x.Value.ToUpper().Trim() == tagValue.ToUpper().Trim()).FirstOrDefault();
+                                    var isExistVendorTag = vicVendorTags.Where(x => x.Value.ToUpper().Trim() == tagValue.ToUpper().Trim()).FirstOrDefault();
 
-                                if (isExistVendorTag != null)
-                                {
-                                    // vendor tag assign.
-                                    await VendorTagAssign(token, sourceType, env, vendor.VendorNumber, vendorResponse.InternalId, isExistVendorTag.Id, 0);
-                                }
-                                else
-                                {
-                                    // vendor tag add
-                                    var tag = tagValue.ToUpper().Trim();
+                                    if (isExistVendorTag != null)
+                                    {
+                                        // vendor tag assign.
+                                        await VendorTagAssign(token, sourceType, env, vendor.VendorNumber, vendorResponse.InternalId, isExistVendorTag.Id, 0);
+                                    }
+                                    else
+                                    {
+                                        // vendor tag add
+                                        var tag = tagValue.ToUpper().Trim();
 
-                                    var vendorTagAfterSave = await AddVendorForWinTeamToVicUAT(token, tag, sourceType, env, vendor.VendorNumber);
+                                        var vendorTagAfterSave = await AddVendorForWinTeamToVicUAT(token, tag, sourceType, env, vendor.VendorNumber);
 
-                                    // vendor tag assign
+                                        // vendor tag assign
 
-                                    await VendorTagAssign(token, sourceType, env, vendor.VendorNumber, vendorResponse.InternalId, vendorTagAfterSave.Id, 0);
+                                        await VendorTagAssign(token, sourceType, env, vendor.VendorNumber, vendorResponse.InternalId, vendorTagAfterSave.Id, 0);
+                                    }
                                 }
                             }
+
+
                         }
-
-
+                    }
+                    catch(Exception ex)
+                    {
+                        Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, Stack trace: {ex.StackTrace}");
+                        Utils.LogToFile(1, "[EXCEPTION]", $"Error msg from winteam vendor: {vendor.VendorNumber}, name: {vendor.VendorName}");
                     }
                     
                         
@@ -917,115 +925,122 @@ namespace WinTeamToVic_ConsoleApp.Service
                 {
                     foreach (JobModel job in jobs)
                     {
-                        
-                        var uri = _baseAddressForUAT + _jobUrl + job.JobNumber;
-                        Utils.LogToFile(3, "[INFO]", $"Request uri: {uri}");
-
-                        var requestBody = new
+                        try
                         {
-                            externalUpdatedAt = USATimeModel.GetUSATime().ToString("yyyy-MM-ddTHH:mm:ss.fff"),
-                            name = job.JobNumber,
-                            shortName = job.JobDescription,
-                            type = "jobnumber",
-                            typeName = "Job Number",
-                            typeExternalId = "jobnumber"
-                        };
+                            var uri = _baseAddressForUAT + _jobUrl + job.JobNumber;
+                            Utils.LogToFile(3, "[INFO]", $"Request uri: {uri}");
 
-                        // Serialize the object to JSON
-                        var json = JsonConvert.SerializeObject(requestBody, Formatting.Indented);
-                        Utils.LogToFile(3, "[INFO]", $"Request body: {json}");
-
-                        // Serialize the request body to JSON
-                        var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                        _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-
-                        var response = await _httpClient.PutAsync(uri, content);
-
-                        // create log msg object
-                        StringBuilder msgForLog = new StringBuilder();
-
-                        // create vendor response object
-                        JobResponseModel jobResponse = new JobResponseModel();
-
-                        // create vic service log object
-                        var vicServiceLog = new VicServiceLog();
-
-                        if (response.IsSuccessStatusCode)
-                        {
-                            var responseData = await response.Content.ReadAsStringAsync();
-                            Utils.LogToFile(3, "[INFO]", $"Response body: {responseData}");
-
-                            try
+                            var requestBody = new
                             {
-                                jobResponse = JsonConvert.DeserializeObject<JobResponseModel>(responseData);
-                                vicServiceLog.Status = true;
-                                vicServiceLog.VicResponse = responseData;
+                                externalUpdatedAt = USATimeModel.GetUSATime().ToString("yyyy-MM-ddTHH:mm:ss.fff"),
+                                name = job.JobNumber,
+                                shortName = job.JobDescription,
+                                type = "jobnumber",
+                                typeName = "Job Number",
+                                typeExternalId = "jobnumber"
+                            };
+
+                            // Serialize the object to JSON
+                            var json = JsonConvert.SerializeObject(requestBody, Formatting.Indented);
+                            Utils.LogToFile(3, "[INFO]", $"Request body: {json}");
+
+                            // Serialize the request body to JSON
+                            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                            _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+                            var response = await _httpClient.PutAsync(uri, content);
+
+                            // create log msg object
+                            StringBuilder msgForLog = new StringBuilder();
+
+                            // create vendor response object
+                            JobResponseModel jobResponse = new JobResponseModel();
+
+                            // create vic service log object
+                            var vicServiceLog = new VicServiceLog();
+
+                            if (response.IsSuccessStatusCode)
+                            {
+                                var responseData = await response.Content.ReadAsStringAsync();
+                                Utils.LogToFile(3, "[INFO]", $"Response body: {responseData}");
+
+                                try
+                                {
+                                    jobResponse = JsonConvert.DeserializeObject<JobResponseModel>(responseData);
+                                    vicServiceLog.Status = true;
+                                    vicServiceLog.VicResponse = responseData;
+                                }
+                                catch (Exception ex)
+                                {
+                                    msgForLog.AppendLine("Job reponse parse error.");
+                                    msgForLog.AppendLine(ex.Message);
+                                    vicServiceLog.Status = false;
+                                    vicServiceLog.VicResponse = msgForLog.ToString();
+
+                                    Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, stack trace: {ex.StackTrace}");
+                                }
+
+                                if (isUpdate > 0)
+                                {
+                                    msgForLog.AppendLine($"Successfully updated the Job. Job number: {job.JobNumber}.");
+                                }
+                                else
+                                {
+                                    msgForLog.AppendLine($"Successfully added the Job. Job number: {job.JobNumber}.");
+                                }
+
                             }
-                            catch (Exception ex)
+                            else
                             {
-                                msgForLog.AppendLine("Job reponse parse error.");
-                                msgForLog.AppendLine(ex.Message);
+                                Console.WriteLine($"Job number: {job.JobNumber}");
+                                Console.WriteLine(response.ReasonPhrase);
+
+                                // error log
+                                var responseBody = await response.Content.ReadAsStringAsync();
+                                //var errors = JArray.Parse(responseBody);
+
+                                // error log
+                                if (isUpdate > 0)
+                                {
+                                    msgForLog.AppendLine($"Failed to updated the Job. Error msg: {responseBody}");
+                                }
+                                else
+                                {
+                                    msgForLog.AppendLine($"Failed to added the Job. Error msg: {responseBody}");
+                                }
+
                                 vicServiceLog.Status = false;
-                                vicServiceLog.VicResponse = msgForLog.ToString();
-
-                                Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, stack trace: {ex.StackTrace}");
+                                vicServiceLog.VicResponse = responseBody;
                             }
 
-                            if(isUpdate > 0)
+                            vicServiceLog.InternalId = jobResponse.InternalId;
+                            vicServiceLog.ObjectType = "Job";
+                            vicServiceLog.SourceType = sourceType;
+                            vicServiceLog.VicRequest = json;
+                            vicServiceLog.SentDate = USATimeModel.GetUSATime().ToString("MM-dd-yyyy hh:mm:ss tt");
+                            vicServiceLog.ExternalId = jobResponse.ExternalId;
+                            vicServiceLog.Note = msgForLog.ToString();
+                            vicServiceLog.DestinationENV = env;
+
+                            // save vic service log
+                            if (isUpdate > 0)
                             {
-                                msgForLog.AppendLine($"Successfully updated the Job. Job number: {job.JobNumber}.");
+                                var existingJob = vicServiceLogs.Where(x => x.ExternalId == job.JobNumber).FirstOrDefault();
+                                Utils.LogToFile(3, "[INFO]", $"Job numbe: {existingJob.ExternalId}, Vic job id: {existingJob.InternalId}");
+
+                                vicServiceLog.Id = existingJob.Id;
+                                _dal.UpdateVicServiceLog(vicServiceLog);
                             }
                             else
                             {
-                                msgForLog.AppendLine($"Successfully added the Job. Job number: {job.JobNumber}.");
+                                _dal.SaveVicServiceLog(vicServiceLog);
                             }
-                                
                         }
-                        else
+                        catch (Exception ex) 
                         {
-                            Console.WriteLine($"Job number: {job.JobNumber}");
-                            Console.WriteLine(response.ReasonPhrase);
-
-                            // error log
-                            var responseBody = await response.Content.ReadAsStringAsync();
-                            //var errors = JArray.Parse(responseBody);
-
-                            // error log
-                            if(isUpdate > 0)
-                            {
-                                msgForLog.AppendLine($"Failed to updated the Job. Error msg: {responseBody}");
-                            }
-                            else
-                            {
-                                msgForLog.AppendLine($"Failed to added the Job. Error msg: {responseBody}");
-                            }
-                                
-                            vicServiceLog.Status = false;
-                            vicServiceLog.VicResponse = responseBody;
-                        }
-
-                        vicServiceLog.InternalId = jobResponse.InternalId;
-                        vicServiceLog.ObjectType = "Job";
-                        vicServiceLog.SourceType = sourceType;
-                        vicServiceLog.VicRequest = json;
-                        vicServiceLog.SentDate = USATimeModel.GetUSATime().ToString("MM-dd-yyyy hh:mm:ss tt");
-                        vicServiceLog.ExternalId = jobResponse.ExternalId;
-                        vicServiceLog.Note = msgForLog.ToString();
-                        vicServiceLog.DestinationENV = env;
-
-                        // save vic service log
-                        if (isUpdate > 0)
-                        {
-                            var existingJob = vicServiceLogs.Where(x => x.ExternalId == job.JobNumber).FirstOrDefault();
-                            Utils.LogToFile(3, "[INFO]", $"Job numbe: {existingJob.ExternalId}, Vic job id: {existingJob.InternalId}");
-
-                            vicServiceLog.Id = existingJob.Id;
-                            _dal.UpdateVicServiceLog(vicServiceLog);
-                        }
-                        else
-                        {
-                            _dal.SaveVicServiceLog(vicServiceLog);
+                            Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, Stack trace: {ex.StackTrace}");
+                            Utils.LogToFile(1, "[EXCEPTION]", $"Error msg from winteam job: {job.JobNumber}, description: {job.JobDescription}");
                         }
                     }
                 }
@@ -1051,109 +1066,117 @@ namespace WinTeamToVic_ConsoleApp.Service
                 {
                     foreach (GLModel glAccount in glAccounts)
                     {
-                        var uri = _baseAddressForUAT + _glUrl + glAccount.GlNumber;
-                        Utils.LogToFile(3, "[INFO]", $"Request uri: {uri}");
-
-                        var requestBody = new
+                        try
                         {
-                            externalUpdatedAt = USATimeModel.GetUSATime().ToString("yyyy-MM-ddTHH:mm:ss.fff"),
-                            number = glAccount.GlNumber,
-                            name = glAccount.AccountDescription
-                        };
+                            var uri = _baseAddressForUAT + _glUrl + glAccount.GlNumber;
+                            Utils.LogToFile(3, "[INFO]", $"Request uri: {uri}");
 
-                        // Serialize the object to JSON
-                        var json = JsonConvert.SerializeObject(requestBody, Formatting.Indented);
-                        Utils.LogToFile(3, "[INFO]", $"Request body: {json}");
-
-                        // Serialize the request body to JSON
-                        var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                        _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-
-                        var response = await _httpClient.PutAsync(uri, content);
-
-                        // create log msg object
-                        StringBuilder msgForLog = new StringBuilder();
-
-                        // create vendor response object
-                        GLResponseModel glResponse = new GLResponseModel();
-
-                        // create vic service log object
-                        var vicServiceLog = new VicServiceLog();
-
-                        if (response.IsSuccessStatusCode)
-                        {
-                            var responseData = await response.Content.ReadAsStringAsync();
-                            Utils.LogToFile(3, "[INFO]", $"Response body: {responseData}");
-                            try
+                            var requestBody = new
                             {
-                                glResponse = JsonConvert.DeserializeObject<GLResponseModel>(responseData);
-                                vicServiceLog.Status = true;
-                                vicServiceLog.VicResponse = responseData;
+                                externalUpdatedAt = USATimeModel.GetUSATime().ToString("yyyy-MM-ddTHH:mm:ss.fff"),
+                                number = glAccount.GlNumber,
+                                name = glAccount.AccountDescription
+                            };
+
+                            // Serialize the object to JSON
+                            var json = JsonConvert.SerializeObject(requestBody, Formatting.Indented);
+                            Utils.LogToFile(3, "[INFO]", $"Request body: {json}");
+
+                            // Serialize the request body to JSON
+                            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                            _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+                            var response = await _httpClient.PutAsync(uri, content);
+
+                            // create log msg object
+                            StringBuilder msgForLog = new StringBuilder();
+
+                            // create vendor response object
+                            GLResponseModel glResponse = new GLResponseModel();
+
+                            // create vic service log object
+                            var vicServiceLog = new VicServiceLog();
+
+                            if (response.IsSuccessStatusCode)
+                            {
+                                var responseData = await response.Content.ReadAsStringAsync();
+                                Utils.LogToFile(3, "[INFO]", $"Response body: {responseData}");
+                                try
+                                {
+                                    glResponse = JsonConvert.DeserializeObject<GLResponseModel>(responseData);
+                                    vicServiceLog.Status = true;
+                                    vicServiceLog.VicResponse = responseData;
+                                }
+                                catch (Exception ex)
+                                {
+                                    msgForLog.AppendLine("GL reponse parse error.");
+                                    msgForLog.AppendLine(ex.Message);
+                                    vicServiceLog.Status = false;
+                                    vicServiceLog.VicResponse = msgForLog.ToString();
+
+                                    Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, stack trace: {ex.StackTrace}");
+                                }
+
+                                if (isUpdated > 0)
+                                {
+                                    msgForLog.AppendLine($"Successfully updated the gl account. GL number: {glAccount.GlNumber}.");
+                                }
+                                else
+                                {
+                                    msgForLog.AppendLine($"Successfully added the gl account. GL number: {glAccount.GlNumber}.");
+                                }
                             }
-                            catch (Exception ex)
+                            else
                             {
-                                msgForLog.AppendLine("GL reponse parse error.");
-                                msgForLog.AppendLine(ex.Message);
+                                Console.WriteLine($"Gl number: {glAccount.GlNumber}");
+                                Console.WriteLine(response.ReasonPhrase);
+
+                                // error log
+                                var responseBody = await response.Content.ReadAsStringAsync();
+                                //var errors = JArray.Parse(responseBody);
+
+                                // error log
+                                if (isUpdated > 0)
+                                {
+                                    msgForLog.AppendLine($"Failed to updated the gl account. Error msg: {responseBody}");
+                                }
+                                else
+                                {
+                                    msgForLog.AppendLine($"Failed to added the gl account. Error msg: {responseBody}");
+                                }
+
                                 vicServiceLog.Status = false;
-                                vicServiceLog.VicResponse = msgForLog.ToString();
-
-                                Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, stack trace: {ex.StackTrace}");
+                                vicServiceLog.VicResponse = responseBody;
                             }
 
-                            if(isUpdated > 0)
+                            vicServiceLog.InternalId = glResponse.InternalId;
+                            vicServiceLog.ObjectType = "GL Account";
+                            vicServiceLog.SourceType = sourceType;
+                            vicServiceLog.VicRequest = json;
+                            vicServiceLog.SentDate = USATimeModel.GetUSATime().ToString("MM-dd-yyyy hh:mm:ss tt");
+                            vicServiceLog.ExternalId = glResponse.ExternalId;
+                            vicServiceLog.Note = msgForLog.ToString();
+                            vicServiceLog.DestinationENV = env;
+
+                            // save vic service log
+                            if (isUpdated > 0)
                             {
-                                msgForLog.AppendLine($"Successfully updated the gl account. GL number: {glAccount.GlNumber}.");
+                                var existingAccount = vicServiceLogs.Where(x => x.ExternalId == glAccount.GlNumber).FirstOrDefault();
+                                Utils.LogToFile(3, "[INFO]", $"GL Account number: {existingAccount.ExternalId}, Vic gl account id: {existingAccount.InternalId}");
+
+                                vicServiceLog.Id = existingAccount.Id;
+                                _dal.UpdateVicServiceLog(vicServiceLog);
                             }
                             else
                             {
-                                msgForLog.AppendLine($"Successfully added the gl account. GL number: {glAccount.GlNumber}.");
+                                _dal.SaveVicServiceLog(vicServiceLog);
                             }
                         }
-                        else
+                        catch(Exception ex)
                         {
-                            Console.WriteLine($"Gl number: {glAccount.GlNumber}");
-                            Console.WriteLine(response.ReasonPhrase);
-
-                            // error log
-                            var responseBody = await response.Content.ReadAsStringAsync();
-                            //var errors = JArray.Parse(responseBody);
-
-                            // error log
-                            if(isUpdated > 0)
-                            {
-                                msgForLog.AppendLine($"Failed to updated the gl account. Error msg: {responseBody}");
-                            }
-                            else
-                            {
-                                msgForLog.AppendLine($"Failed to added the gl account. Error msg: {responseBody}");
-                            }
-                                
-                            vicServiceLog.Status = false;
-                            vicServiceLog.VicResponse = responseBody;
-                        }
-
-                        vicServiceLog.InternalId = glResponse.InternalId;
-                        vicServiceLog.ObjectType = "GL Account";
-                        vicServiceLog.SourceType = sourceType;
-                        vicServiceLog.VicRequest = json;
-                        vicServiceLog.SentDate = USATimeModel.GetUSATime().ToString("MM-dd-yyyy hh:mm:ss tt");
-                        vicServiceLog.ExternalId = glResponse.ExternalId;
-                        vicServiceLog.Note = msgForLog.ToString();
-                        vicServiceLog.DestinationENV = env;
-
-                        // save vic service log
-                        if (isUpdated > 0)
-                        {
-                            var existingAccount = vicServiceLogs.Where(x => x.ExternalId == glAccount.GlNumber).FirstOrDefault();
-                            Utils.LogToFile(3, "[INFO]", $"GL Account number: {existingAccount.ExternalId}, Vic gl account id: {existingAccount.InternalId}");
-
-                            vicServiceLog.Id = existingAccount.Id;
-                            _dal.UpdateVicServiceLog(vicServiceLog);
-                        }
-                        else
-                        {
-                            _dal.SaveVicServiceLog(vicServiceLog);
+                            Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, Stack trace: {ex.StackTrace}");
+                            Utils.LogToFile(1, "[EXCEPTION]", $"Error msg from gl: {glAccount.GlNumber}, description: {glAccount.AccountDescription}");
                         }
 
                     }
@@ -1748,119 +1771,129 @@ namespace WinTeamToVic_ConsoleApp.Service
             {
                 foreach (TotalServiceVendorModel vendor in vendors)
                 {
-                    string vendorNumber = EncoderModel.EncodeVendorNumber(vendor?.VendorNumber);
-                    var uri = _baseAddressForUAT + _vendorUrl + vendorNumber;
-                    Utils.LogToFile(3, "[INFO]", $"Request uri: {uri}");
-
-                    var requestBody = new
+                    try
                     {
-                        externalId = $"{vendor?.VendorNumber}",
-                        externalUpdatedAt = USATimeModel.GetUSATime().ToString("yyyy-MM-ddTHH:mm:ss.fff"),
-                        name = vendor?.VendorName,
-                        phone = vendor?.Phone,
-                        addressStreet = vendor?.Address,
-                        addressCity = vendor?.City,
-                        addressState = vendor?.State,
-                        addressPostalCode = vendor?.Zip,
-                        state = vendor?.Status,
-                        countryCode = vendor.CountryCode
-                    };
+                        string vendorNumber = EncoderModel.EncodeVendorNumber(vendor?.VendorNumber);
+                        var uri = _baseAddressForUAT + _vendorUrl + vendorNumber;
+                        Utils.LogToFile(3, "[INFO]", $"Request uri: {uri}");
 
-                    // Serialize the object to JSON
-                    var json = JsonConvert.SerializeObject(requestBody, Formatting.Indented);
-                    Utils.LogToFile(3, "[INFO]", $"Request body: {json}");
-
-                    // Serialize the request body to JSON
-                    var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                    _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-
-                    var response = await _httpClient.PutAsync(uri, content);
-
-                    // create log msg object
-                    StringBuilder msgForLog = new StringBuilder();
-
-                    // create vendor response object
-                    VendorResponseModel vendorResponse = new VendorResponseModel();
-
-                    // create vic service log object
-                    var vicServiceLog = new VicServiceLog();
-
-                    if (response.IsSuccessStatusCode)
-                    {
-                        var responseData = await response.Content.ReadAsStringAsync();
-                        Utils.LogToFile(3, "[INFO]", $"Response body: {responseData}");
-
-                        try
+                        var requestBody = new
                         {
-                            vendorResponse = JsonConvert.DeserializeObject<VendorResponseModel>(responseData);
-                            vicServiceLog.Status = true;
-                            vicServiceLog.VicResponse = responseData;
+                            externalId = $"{vendor?.VendorNumber}",
+                            externalUpdatedAt = USATimeModel.GetUSATime().ToString("yyyy-MM-ddTHH:mm:ss.fff"),
+                            name = vendor?.VendorName,
+                            phone = vendor?.Phone,
+                            addressStreet = vendor?.Address,
+                            addressCity = vendor?.City,
+                            addressState = vendor?.State,
+                            addressPostalCode = vendor?.Zip,
+                            state = vendor?.Status,
+                            countryCode = vendor.CountryCode
+                        };
+
+                        // Serialize the object to JSON
+                        var json = JsonConvert.SerializeObject(requestBody, Formatting.Indented);
+                        Utils.LogToFile(3, "[INFO]", $"Request body: {json}");
+
+                        // Serialize the request body to JSON
+                        var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                        _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+                        var response = await _httpClient.PutAsync(uri, content);
+
+                        // create log msg object
+                        StringBuilder msgForLog = new StringBuilder();
+
+                        // create vendor response object
+                        VendorResponseModel vendorResponse = new VendorResponseModel();
+
+                        // create vic service log object
+                        var vicServiceLog = new VicServiceLog();
+
+                        if (response.IsSuccessStatusCode)
+                        {
+                            var responseData = await response.Content.ReadAsStringAsync();
+                            Utils.LogToFile(3, "[INFO]", $"Response body: {responseData}");
+
+                            try
+                            {
+                                vendorResponse = JsonConvert.DeserializeObject<VendorResponseModel>(responseData);
+                                vicServiceLog.Status = true;
+                                vicServiceLog.VicResponse = responseData;
+                            }
+                            catch (Exception ex)
+                            {
+                                msgForLog.AppendLine("Vendor reponse parse error.");
+                                msgForLog.AppendLine(ex.Message);
+
+                                vicServiceLog.Status = false;
+                                vicServiceLog.VicResponse = msgForLog.ToString();
+
+                                Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, stack trace: {ex.StackTrace}");
+                            }
+
+                            if (isUpdated > 0)
+                            {
+                                msgForLog.AppendLine($"Successfully updated the vendor. Vendor number: {vendor.VendorNumber}.");
+                            }
+                            else
+                            {
+                                msgForLog.AppendLine($"Successfully added the vendor. Vendor number: {vendor.VendorNumber}.");
+                            }
                         }
-                        catch (Exception ex)
+                        else
                         {
-                            msgForLog.AppendLine("Vendor reponse parse error.");
-                            msgForLog.AppendLine(ex.Message);
+                            Console.WriteLine($"Vendor number: {vendor.VendorNumber}");
+                            Console.WriteLine(response.ReasonPhrase);
 
+                            // error log
+                            var responseBody = await response.Content.ReadAsStringAsync();
+                            //var errors = JArray.Parse(responseBody);
+
+                            // error log
+                            if (isUpdated > 0)
+                            {
+                                msgForLog.AppendLine($"Failed to updated the vendor. Error msg: {responseBody}");
+                            }
+                            else
+                            {
+                                msgForLog.AppendLine($"Failed to added the vendor. Error msg: {responseBody}");
+                            }
                             vicServiceLog.Status = false;
-                            vicServiceLog.VicResponse = msgForLog.ToString();
-
-                            Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, stack trace: {ex.StackTrace}");
+                            vicServiceLog.VicResponse = responseBody;
                         }
 
+                        vicServiceLog.InternalId = vendorResponse.InternalId;
+                        vicServiceLog.ObjectType = "Vendor";
+                        vicServiceLog.SourceType = sourceType;
+                        vicServiceLog.VicRequest = json;
+                        vicServiceLog.SentDate = USATimeModel.GetUSATime().ToString("MM-dd-yyyy hh:mm:ss tt");
+                        vicServiceLog.ExternalId = vendor.VendorNumber;
+                        vicServiceLog.Note = msgForLog.ToString();
+                        vicServiceLog.DestinationENV = env;
+
+                        // save vic service log
                         if (isUpdated > 0)
                         {
-                            msgForLog.AppendLine($"Successfully updated the vendor. Vendor number: {vendor.VendorNumber}.");
+                            var existingVendor = vicServiceLogs?.Where(x => x.ExternalId == vendor?.VendorNumber).FirstOrDefault();
+                            Utils.LogToFile(3, "[INFO]", $"Vendor number: {existingVendor?.ExternalId}, Vic vendor id: {existingVendor?.InternalId}");
+
+                            vicServiceLog.Id = existingVendor.Id;
+                            _dal.UpdateVicServiceLog(vicServiceLog);
                         }
                         else
                         {
-                            msgForLog.AppendLine($"Successfully added the vendor. Vendor number: {vendor.VendorNumber}.");
+                            _dal.SaveVicServiceLog(vicServiceLog);
                         }
                     }
-                    else
+                    catch (Exception ex) 
                     {
-                        Console.WriteLine($"Vendor number: {vendor.VendorNumber}");
-                        Console.WriteLine(response.ReasonPhrase);
-
-                        // error log
-                        var responseBody = await response.Content.ReadAsStringAsync();
-                        //var errors = JArray.Parse(responseBody);
-
-                        // error log
-                        if(isUpdated > 0)
-                        {
-                            msgForLog.AppendLine($"Failed to updated the vendor. Error msg: {responseBody}");
-                        }
-                        else
-                        {
-                            msgForLog.AppendLine($"Failed to added the vendor. Error msg: {responseBody}");
-                        }
-                        vicServiceLog.Status = false;
-                        vicServiceLog.VicResponse = responseBody;
+                        Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, Stack trace: {ex.StackTrace}");
+                        Utils.LogToFile(1, "[EXCEPTION]", $"Error msg from vendor: {vendor.VendorNumber}, name: {vendor.VendorName}");
+                    
                     }
-
-                    vicServiceLog.InternalId = vendorResponse.InternalId;
-                    vicServiceLog.ObjectType = "Vendor";
-                    vicServiceLog.SourceType = sourceType;
-                    vicServiceLog.VicRequest = json;
-                    vicServiceLog.SentDate = USATimeModel.GetUSATime().ToString("MM-dd-yyyy hh:mm:ss tt");
-                    vicServiceLog.ExternalId = vendor.VendorNumber;
-                    vicServiceLog.Note = msgForLog.ToString();
-                    vicServiceLog.DestinationENV = env;
-
-                    // save vic service log
-                    if (isUpdated > 0)
-                    {
-                        var existingVendor = vicServiceLogs?.Where(x => x.ExternalId == vendor?.VendorNumber).FirstOrDefault();
-                        Utils.LogToFile(3, "[INFO]", $"Vendor number: {existingVendor?.ExternalId}, Vic vendor id: {existingVendor?.InternalId}");
-
-                        vicServiceLog.Id = existingVendor.Id;
-                        _dal.UpdateVicServiceLog(vicServiceLog);
-                    }
-                    else
-                    {
-                        _dal.SaveVicServiceLog(vicServiceLog);
-                    }
+                    
                 }
 
             }
@@ -1879,114 +1912,121 @@ namespace WinTeamToVic_ConsoleApp.Service
                 {
                     foreach (TotalServiceJobModel job in jobs)
                     {
-                        
-                        var uri = _baseAddressForUAT + _jobUrl + job.ID;
-                        Utils.LogToFile(3, "[INFO]", $"Request uri: {uri}");
-
-                        var requestBody = new
+                        try
                         {
-                            externalUpdatedAt = USATimeModel.GetUSATime().ToString("yyyy-MM-ddTHH:mm:ss.fff"),
-                            name = job.ID.ToString(),
-                            shortName = job.JobDescription,
-                            type = "jobnumber",
-                            typeName = "Job",
-                            typeExternalId = "jobnumber"
-                        };
+                            var uri = _baseAddressForUAT + _jobUrl + job.ID;
+                            Utils.LogToFile(3, "[INFO]", $"Request uri: {uri}");
 
-                        // Serialize the object to JSON
-                        var json = JsonConvert.SerializeObject(requestBody, Formatting.Indented);
-                        Utils.LogToFile(3, "[INFO]", $"Request body: {json}");
-
-                        // Serialize the request body to JSON
-                        var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                        _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-
-                        var response = await _httpClient.PutAsync(uri, content);
-
-                        // create log msg object
-                        StringBuilder msgForLog = new StringBuilder();
-
-                        // create vendor response object
-                        JobResponseModel jobResponse = new JobResponseModel();
-
-                        // create vic service log object
-                        var vicServiceLog = new VicServiceLog();
-
-                        if (response.IsSuccessStatusCode)
-                        {
-                            var responseData = await response.Content.ReadAsStringAsync();
-                            Utils.LogToFile(3, "[INFO]", $"Response body: {responseData}");
-
-                            try
+                            var requestBody = new
                             {
-                                jobResponse = JsonConvert.DeserializeObject<JobResponseModel>(responseData);
-                                vicServiceLog.Status = true;
-                                vicServiceLog.VicResponse = responseData;
+                                externalUpdatedAt = USATimeModel.GetUSATime().ToString("yyyy-MM-ddTHH:mm:ss.fff"),
+                                name = job.ID.ToString(),
+                                shortName = job.JobDescription,
+                                type = "jobnumber",
+                                typeName = "Job",
+                                typeExternalId = "jobnumber"
+                            };
+
+                            // Serialize the object to JSON
+                            var json = JsonConvert.SerializeObject(requestBody, Formatting.Indented);
+                            Utils.LogToFile(3, "[INFO]", $"Request body: {json}");
+
+                            // Serialize the request body to JSON
+                            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                            _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+                            var response = await _httpClient.PutAsync(uri, content);
+
+                            // create log msg object
+                            StringBuilder msgForLog = new StringBuilder();
+
+                            // create vendor response object
+                            JobResponseModel jobResponse = new JobResponseModel();
+
+                            // create vic service log object
+                            var vicServiceLog = new VicServiceLog();
+
+                            if (response.IsSuccessStatusCode)
+                            {
+                                var responseData = await response.Content.ReadAsStringAsync();
+                                Utils.LogToFile(3, "[INFO]", $"Response body: {responseData}");
+
+                                try
+                                {
+                                    jobResponse = JsonConvert.DeserializeObject<JobResponseModel>(responseData);
+                                    vicServiceLog.Status = true;
+                                    vicServiceLog.VicResponse = responseData;
+                                }
+                                catch (Exception ex)
+                                {
+                                    msgForLog.AppendLine("Job reponse parse error.");
+                                    msgForLog.AppendLine(ex.Message);
+                                    vicServiceLog.Status = false;
+                                    vicServiceLog.VicResponse = msgForLog.ToString();
+
+                                    Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, stack trace: {ex.StackTrace}");
+                                }
+
+                                if (isUpdated > 0)
+                                {
+                                    msgForLog.AppendLine($"Successfully updated the Job. Job number: {job.ID}.");
+                                }
+                                else
+                                {
+                                    msgForLog.AppendLine($"Successfully added the Job. Job number: {job.ID}.");
+                                }
+
                             }
-                            catch (Exception ex)
+                            else
                             {
-                                msgForLog.AppendLine("Job reponse parse error.");
-                                msgForLog.AppendLine(ex.Message);
+                                Console.WriteLine($"Job number: {job.ID}");
+                                Console.WriteLine(response.ReasonPhrase);
+
+                                // error log
+                                var responseBody = await response.Content.ReadAsStringAsync();
+                                //var errors = JArray.Parse(responseBody);
+
+                                // error log
+                                if (isUpdated > 0)
+                                {
+                                    msgForLog.AppendLine($"Failed to updated the Job. Error msg: {responseBody}");
+                                }
+                                else
+                                {
+                                    msgForLog.AppendLine($"Failed to added the Job. Error msg: {responseBody}");
+                                }
                                 vicServiceLog.Status = false;
-                                vicServiceLog.VicResponse = msgForLog.ToString();
-
-                                Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, stack trace: {ex.StackTrace}");
+                                vicServiceLog.VicResponse = responseBody;
                             }
 
-                            if(isUpdated > 0)
+                            vicServiceLog.InternalId = jobResponse.InternalId;
+                            vicServiceLog.ObjectType = "Job";
+                            vicServiceLog.SourceType = sourceType;
+                            vicServiceLog.VicRequest = json;
+                            vicServiceLog.SentDate = USATimeModel.GetUSATime().ToString("MM-dd-yyyy hh:mm:ss tt");
+                            vicServiceLog.ExternalId = job.ID.ToString();
+                            vicServiceLog.Note = msgForLog.ToString();
+                            vicServiceLog.DestinationENV = env;
+
+                            // save vic service log
+                            if (isUpdated > 0)
                             {
-                                msgForLog.AppendLine($"Successfully updated the Job. Job number: {job.ID}.");
+                                var existingJob = vicServiceLogs.Where(x => x.ExternalId == job.ID.ToString()).FirstOrDefault();
+                                Utils.LogToFile(3, "[INFO]", $"Job number: {existingJob.ExternalId}, Vic job id: {existingJob.InternalId}");
+
+                                vicServiceLog.Id = existingJob.Id;
+                                _dal.UpdateVicServiceLog(vicServiceLog);
                             }
                             else
                             {
-                                msgForLog.AppendLine($"Successfully added the Job. Job number: {job.ID}.");
+                                _dal.SaveVicServiceLog(vicServiceLog);
                             }
-                                
                         }
-                        else
+                        catch (Exception ex) 
                         {
-                            Console.WriteLine($"Job number: {job.ID}");
-                            Console.WriteLine(response.ReasonPhrase);
-
-                            // error log
-                            var responseBody = await response.Content.ReadAsStringAsync();
-                            //var errors = JArray.Parse(responseBody);
-
-                            // error log
-                            if(isUpdated > 0)
-                            {
-                                msgForLog.AppendLine($"Failed to updated the Job. Error msg: {responseBody}");
-                            }
-                            else
-                            {
-                                msgForLog.AppendLine($"Failed to added the Job. Error msg: {responseBody}");
-                            }
-                            vicServiceLog.Status = false;
-                            vicServiceLog.VicResponse = responseBody;
-                        }
-
-                        vicServiceLog.InternalId = jobResponse.InternalId;
-                        vicServiceLog.ObjectType = "Job";
-                        vicServiceLog.SourceType = sourceType;
-                        vicServiceLog.VicRequest = json;
-                        vicServiceLog.SentDate = USATimeModel.GetUSATime().ToString("MM-dd-yyyy hh:mm:ss tt");
-                        vicServiceLog.ExternalId = job.ID.ToString();
-                        vicServiceLog.Note = msgForLog.ToString();
-                        vicServiceLog.DestinationENV = env;
-
-                        // save vic service log
-                        if (isUpdated > 0)
-                        {
-                            var existingJob = vicServiceLogs.Where(x => x.ExternalId == job.ID.ToString()).FirstOrDefault();
-                            Utils.LogToFile(3, "[INFO]", $"Job number: {existingJob.ExternalId}, Vic job id: {existingJob.InternalId}");
-
-                            vicServiceLog.Id = existingJob.Id;
-                            _dal.UpdateVicServiceLog(vicServiceLog);
-                        }
-                        else
-                        {
-                            _dal.SaveVicServiceLog(vicServiceLog);
+                            Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, Stack trace: {ex.StackTrace}");
+                            Utils.LogToFile(1, "[EXCEPTION]", $"Error msg from job: {job.ID}, description: {job.JobDescription}");
                         }
 
                     }
@@ -2013,112 +2053,119 @@ namespace WinTeamToVic_ConsoleApp.Service
                 {
                     foreach (TotalServiceGLModel glAccount in glAccounts)
                     {
-                        
-                        var uri = _baseAddressForUAT + _glUrl + glAccount.GLAccountNumber;
-                        Utils.LogToFile(3, "[INFO]", $"Request uri: {uri}");
-
-                        var requestBody = new
+                        try
                         {
-                            externalUpdatedAt = USATimeModel.GetUSATime().ToString("yyyy-MM-ddTHH:mm:ss.fff"),
-                            number = glAccount.GLAccountNumber,
-                            name = glAccount.GLAccountDescription
-                        };
+                            var uri = _baseAddressForUAT + _glUrl + glAccount.GLAccountNumber;
+                            Utils.LogToFile(3, "[INFO]", $"Request uri: {uri}");
 
-                        // Serialize the object to JSON
-                        var json = JsonConvert.SerializeObject(requestBody, Formatting.Indented);
-                        Utils.LogToFile(3, "[INFO]", $"Request body: {json}");
-
-                        // Serialize the request body to JSON
-                        var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                        _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-
-                        var response = await _httpClient.PutAsync(uri, content);
-
-                        // create log msg object
-                        StringBuilder msgForLog = new StringBuilder();
-
-                        // create vendor response object
-                        GLResponseModel glResponse = new GLResponseModel();
-
-                        // create vic service log object
-                        var vicServiceLog = new VicServiceLog();
-
-                        if (response.IsSuccessStatusCode)
-                        {
-                            var responseData = await response.Content.ReadAsStringAsync();
-                            Utils.LogToFile(3, "[INFO]", $"Response body: {responseData}");
-
-                            try
+                            var requestBody = new
                             {
-                                glResponse = JsonConvert.DeserializeObject<GLResponseModel>(responseData);
-                                vicServiceLog.Status = true;
-                                vicServiceLog.VicResponse = responseData;
+                                externalUpdatedAt = USATimeModel.GetUSATime().ToString("yyyy-MM-ddTHH:mm:ss.fff"),
+                                number = glAccount.GLAccountNumber,
+                                name = glAccount.GLAccountDescription
+                            };
+
+                            // Serialize the object to JSON
+                            var json = JsonConvert.SerializeObject(requestBody, Formatting.Indented);
+                            Utils.LogToFile(3, "[INFO]", $"Request body: {json}");
+
+                            // Serialize the request body to JSON
+                            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                            _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+                            var response = await _httpClient.PutAsync(uri, content);
+
+                            // create log msg object
+                            StringBuilder msgForLog = new StringBuilder();
+
+                            // create vendor response object
+                            GLResponseModel glResponse = new GLResponseModel();
+
+                            // create vic service log object
+                            var vicServiceLog = new VicServiceLog();
+
+                            if (response.IsSuccessStatusCode)
+                            {
+                                var responseData = await response.Content.ReadAsStringAsync();
+                                Utils.LogToFile(3, "[INFO]", $"Response body: {responseData}");
+
+                                try
+                                {
+                                    glResponse = JsonConvert.DeserializeObject<GLResponseModel>(responseData);
+                                    vicServiceLog.Status = true;
+                                    vicServiceLog.VicResponse = responseData;
+                                }
+                                catch (Exception ex)
+                                {
+                                    msgForLog.AppendLine("GL reponse parse error.");
+                                    msgForLog.AppendLine(ex.Message);
+                                    vicServiceLog.Status = false;
+                                    vicServiceLog.VicResponse = msgForLog.ToString();
+
+                                    Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, stack trace: {ex.StackTrace}");
+                                }
+
+                                if (isUpdated > 0)
+                                {
+                                    msgForLog.AppendLine($"Successfully updated the gl account. GL number: {glAccount.GLAccountNumber}.");
+                                }
+                                else
+                                {
+                                    msgForLog.AppendLine($"Successfully added the gl account. GL number: {glAccount.GLAccountNumber}.");
+                                }
+
                             }
-                            catch (Exception ex)
+                            else
                             {
-                                msgForLog.AppendLine("GL reponse parse error.");
-                                msgForLog.AppendLine(ex.Message);
+                                Console.WriteLine($"Gl number: {glAccount.GLAccountNumber}");
+                                Console.WriteLine(response.ReasonPhrase);
+
+                                // error log
+                                var responseBody = await response.Content.ReadAsStringAsync();
+
+                                if (isUpdated > 0)
+                                {
+                                    msgForLog.AppendLine($"Failed to updated the GL Account. Error msg: {responseBody}");
+                                }
+                                else
+                                {
+                                    msgForLog.AppendLine($"Failed to added the GL Account. Error msg: {responseBody}");
+                                }
                                 vicServiceLog.Status = false;
-                                vicServiceLog.VicResponse = msgForLog.ToString();
+                                vicServiceLog.VicResponse = responseBody;
 
-                                Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, stack trace: {ex.StackTrace}");
+                                Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {responseBody}");
                             }
 
-                            if(isUpdated > 0)
+
+                            vicServiceLog.InternalId = glResponse.InternalId;
+                            vicServiceLog.ObjectType = "GL Account";
+                            vicServiceLog.SourceType = sourceType;
+                            vicServiceLog.VicRequest = json;
+                            vicServiceLog.SentDate = USATimeModel.GetUSATime().ToString("MM-dd-yyyy hh:mm:ss tt");
+                            vicServiceLog.ExternalId = glAccount.GLAccountNumber;
+                            vicServiceLog.Note = msgForLog.ToString();
+                            vicServiceLog.DestinationENV = env;
+
+                            // save vic service log
+                            if (isUpdated > 0)
                             {
-                                msgForLog.AppendLine($"Successfully updated the gl account. GL number: {glAccount.GLAccountNumber}.");
+                                var exitingAccount = vicServiceLogs.Where(x => x.ExternalId == glAccount.GLAccountNumber).FirstOrDefault();
+                                Utils.LogToFile(3, "[INFO]", $"GL account number: {exitingAccount.ExternalId}, Vic gl account id: {exitingAccount.InternalId}");
+
+                                vicServiceLog.Id = exitingAccount.Id;
+                                _dal.UpdateVicServiceLog(vicServiceLog);
                             }
                             else
                             {
-                                msgForLog.AppendLine($"Successfully added the gl account. GL number: {glAccount.GLAccountNumber}.");
+                                _dal.SaveVicServiceLog(vicServiceLog);
                             }
-
                         }
-                        else
+                        catch (Exception ex) 
                         {
-                            Console.WriteLine($"Gl number: {glAccount.GLAccountNumber}");
-                            Console.WriteLine(response.ReasonPhrase);
-
-                            // error log
-                            var responseBody = await response.Content.ReadAsStringAsync();
-
-                            if(isUpdated > 0)
-                            {
-                                msgForLog.AppendLine($"Failed to updated the GL Account. Error msg: {responseBody}");
-                            }
-                            else
-                            {
-                                msgForLog.AppendLine($"Failed to added the GL Account. Error msg: {responseBody}");
-                            }
-                            vicServiceLog.Status = false;
-                            vicServiceLog.VicResponse = responseBody;
-
-                            Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {responseBody}");
-                        }
-
-
-                        vicServiceLog.InternalId = glResponse.InternalId;
-                        vicServiceLog.ObjectType = "GL Account";
-                        vicServiceLog.SourceType = sourceType;
-                        vicServiceLog.VicRequest = json;
-                        vicServiceLog.SentDate = USATimeModel.GetUSATime().ToString("MM-dd-yyyy hh:mm:ss tt");
-                        vicServiceLog.ExternalId = glAccount.GLAccountNumber;
-                        vicServiceLog.Note = msgForLog.ToString();
-                        vicServiceLog.DestinationENV = env;
-
-                        // save vic service log
-                        if (isUpdated > 0)
-                        {
-                            var exitingAccount = vicServiceLogs.Where(x => x.ExternalId == glAccount.GLAccountNumber).FirstOrDefault();
-                            Utils.LogToFile(3, "[INFO]", $"GL account number: {exitingAccount.ExternalId}, Vic gl account id: {exitingAccount.InternalId}");
-
-                            vicServiceLog.Id = exitingAccount.Id;
-                            _dal.UpdateVicServiceLog(vicServiceLog);
-                        }
-                        else
-                        {
-                            _dal.SaveVicServiceLog(vicServiceLog);
+                            Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, Stack trace: {ex.StackTrace}");
+                            Utils.LogToFile(1, "[EXCEPTION]", $"Error msg from gl: {glAccount.GLAccountNumber}, description: {glAccount.GLAccountDescription}");
                         }
                     }
                 }
@@ -2147,160 +2194,168 @@ namespace WinTeamToVic_ConsoleApp.Service
 
                     foreach (var poGroup in groupByPO)
                     {
-                        // create vic service log object
-                        var vicServiceLog = new VicServiceLog();
-
-                        // check job is closed or not
-                        var result = IsClosedJob(poGroup);
-
-                        if (result.isClosed)
+                        try
                         {
-                            int poNumber = poGroup.Key ?? 0; // Handle nullable PO
-                            string closedJobs = string.Join(", ", result.closedJobNumbers);
-                            string msg = $"Failed to save purchase order. PO Number: {poGroup.Key} has closed job(s): {closedJobs}";
+                            // create vic service log object
+                            var vicServiceLog = new VicServiceLog();
 
-                            Utils.LogToFile(3, "[INFO]", msg);
+                            // check job is closed or not
+                            var result = IsClosedJob(poGroup);
 
-                            // save to log
-                            vicServiceLog.Status = false;
-                            vicServiceLog.VicResponse = "";
-                            vicServiceLog.InternalId = "";
-                            vicServiceLog.ObjectType = "Purchase Order";
-                            vicServiceLog.SourceType = sourceType;
-                            vicServiceLog.VicRequest = "";
-                            vicServiceLog.SentDate = USATimeModel.GetUSATime().ToString("MM-dd-yyyy hh:mm:ss tt");
-                            vicServiceLog.ExternalId = poNumber.ToString();
-                            vicServiceLog.Note = msg;
-                            vicServiceLog.DestinationENV = env;
-
-                            // save vic service log
-                            _dal.SaveVicServiceLog(vicServiceLog);
-                        }
-                        else
-                        {
-                            var uri = _baseAddressForUAT + _poUrl;
-                            Utils.LogToFile(3, "[INFO]", $"Request uri: {uri}");
-
-                            var po = poGroup.First(); // Use the first item for PO-level data
-                            var vendorNumber = await GetVendorInternalIdByVendorNumber(poGroup.First().VendorNumber, token);
-
-                            //object requestBody = null;
-
-                            var requestBody = new
+                            if (result.isClosed)
                             {
-                                issuedOn = USATimeModel.GetUSATime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ"), // ISO format
-                                poNumber = po.PO.ToString(),
-                                externalId = po.PO.ToString(),
-                                amount = po.TotalAmount.ToString(), // Ensure 2 decimal places
-                                currencyId = "USD",
-                                vendor = new
+                                int poNumber = poGroup.Key ?? 0; // Handle nullable PO
+                                string closedJobs = string.Join(", ", result.closedJobNumbers);
+                                string msg = $"Failed to save purchase order. PO Number: {poGroup.Key} has closed job(s): {closedJobs}";
+
+                                Utils.LogToFile(3, "[INFO]", msg);
+
+                                // save to log
+                                vicServiceLog.Status = false;
+                                vicServiceLog.VicResponse = "";
+                                vicServiceLog.InternalId = "";
+                                vicServiceLog.ObjectType = "Purchase Order";
+                                vicServiceLog.SourceType = sourceType;
+                                vicServiceLog.VicRequest = "";
+                                vicServiceLog.SentDate = USATimeModel.GetUSATime().ToString("MM-dd-yyyy hh:mm:ss tt");
+                                vicServiceLog.ExternalId = poNumber.ToString();
+                                vicServiceLog.Note = msg;
+                                vicServiceLog.DestinationENV = env;
+
+                                // save vic service log
+                                _dal.SaveVicServiceLog(vicServiceLog);
+                            }
+                            else
+                            {
+                                var uri = _baseAddressForUAT + _poUrl;
+                                Utils.LogToFile(3, "[INFO]", $"Request uri: {uri}");
+
+                                var po = poGroup.First(); // Use the first item for PO-level data
+                                var vendorNumber = await GetVendorInternalIdByVendorNumber(poGroup.First().VendorNumber, token);
+
+                                //object requestBody = null;
+
+                                var requestBody = new
                                 {
-                                    internalId = vendorNumber
-                                },
-                                status = "open",
-                                lineItems = poGroup.Select((item, index) => new
-                                {
-                                    productNumber = item.Inv != null ? item.ProductNumber : EncoderModel.TruncatePOItemDescription(item.fdesc), // need trim if description char > 255
-                                    quantityRequested = item.Quan.ToString(),
-                                    quantityReceived = item.Inv != null ? string.Empty : "0",
-                                    unitAmount = item.Price.ToString(),
-                                    lineItemTotal = (item.Quan * item.Price).ToString(),
-                                    lineNumber = (index + 1).ToString(),
-                                    matchingType = "two_way",
+                                    issuedOn = USATimeModel.GetUSATime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ"), // ISO format
+                                    poNumber = po.PO.ToString(),
+                                    externalId = po.PO.ToString(),
+                                    amount = po.TotalAmount.ToString(), // Ensure 2 decimal places
+                                    currencyId = "USD",
+                                    vendor = new
+                                    {
+                                        internalId = vendorNumber
+                                    },
                                     status = "open",
-                                    dimensions = item.Job != null
-                                        ? new[]
-                                        {
+                                    lineItems = poGroup.Select((item, index) => new
+                                    {
+                                        productNumber = item.Inv != null ? item.ProductNumber : EncoderModel.TruncatePOItemDescription(item.fdesc), // need trim if description char > 255
+                                        quantityRequested = item.Quan.ToString(),
+                                        quantityReceived = item.Inv != null ? string.Empty : "0",
+                                        unitAmount = item.Price.ToString(),
+                                        lineItemTotal = (item.Quan * item.Price).ToString(),
+                                        lineNumber = (index + 1).ToString(),
+                                        matchingType = "two_way",
+                                        status = "open",
+                                        dimensions = item.Job != null
+                                            ? new[]
+                                            {
                                         new
                                         {
                                             externalId = item.Job.ToString(),
                                             typeExternalId = "jobnumber"
                                         }
-                                        }
-                                        : new[]
-                                        {
+                                            }
+                                            : new[]
+                                            {
                                         new
                                         {
                                             externalId = string.Empty,
                                             typeExternalId = string.Empty
                                         }
-                                        }.Take(0).ToArray() // no dimension for inventory-only items
-                                }).ToList()
-                            };
+                                            }.Take(0).ToArray() // no dimension for inventory-only items
+                                    }).ToList()
+                                };
 
-                            // Serialize the object to JSON
-                            var json = JsonConvert.SerializeObject(requestBody, Formatting.Indented);
-                            Utils.LogToFile(3, "[INFO]", $"Request body: {json}");
+                                // Serialize the object to JSON
+                                var json = JsonConvert.SerializeObject(requestBody, Formatting.Indented);
+                                Utils.LogToFile(3, "[INFO]", $"Request body: {json}");
 
-                            // Serialize the request body to JSON
-                            var content = new StringContent(json, Encoding.UTF8, "application/json");
+                                // Serialize the request body to JSON
+                                var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                            _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                                _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
-                            var response = await _httpClient.PostAsync(uri, content);
+                                var response = await _httpClient.PostAsync(uri, content);
 
-                            // create log msg object
-                            StringBuilder msgForLog = new StringBuilder();
+                                // create log msg object
+                                StringBuilder msgForLog = new StringBuilder();
 
-                            // create vendor response object
-                            PurchaseOrderResponse poResponse = new PurchaseOrderResponse();
+                                // create vendor response object
+                                PurchaseOrderResponse poResponse = new PurchaseOrderResponse();
 
-                            if (response.IsSuccessStatusCode)
-                            {
-                                var responseData = await response.Content.ReadAsStringAsync();
-                                Utils.LogToFile(3, "[INFO]", $"Reponse body: {responseData}");
-
-                                try
+                                if (response.IsSuccessStatusCode)
                                 {
-                                    poResponse = JsonConvert.DeserializeObject<PurchaseOrderResponse>(responseData);
+                                    var responseData = await response.Content.ReadAsStringAsync();
+                                    Utils.LogToFile(3, "[INFO]", $"Reponse body: {responseData}");
 
-                                    vicServiceLog.Status = true;
-                                    vicServiceLog.VicResponse = responseData;
+                                    try
+                                    {
+                                        poResponse = JsonConvert.DeserializeObject<PurchaseOrderResponse>(responseData);
+
+                                        vicServiceLog.Status = true;
+                                        vicServiceLog.VicResponse = responseData;
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        msgForLog.AppendLine("PO reponse parse error.");
+                                        msgForLog.AppendLine(ex.Message);
+
+                                        vicServiceLog.Status = false;
+                                        vicServiceLog.VicResponse = msgForLog.ToString();
+
+                                        Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {msgForLog.ToString()}, stack trace: {ex.StackTrace}");
+
+                                    }
+                                    msgForLog.AppendLine($"Successfully add purchase order. PO number: {po.PO}.");
+
                                 }
-                                catch (Exception ex)
+                                else
                                 {
-                                    msgForLog.AppendLine("PO reponse parse error.");
-                                    msgForLog.AppendLine(ex.Message);
+                                    Console.WriteLine($"Gl number: {poResponse.PoNumber}");
+                                    Console.WriteLine(response.ReasonPhrase);
 
+                                    // error log
+                                    var responseBody = await response.Content.ReadAsStringAsync();
+
+                                    //var errors = JArray.Parse(responseBody);
+
+                                    // error log
+                                    msgForLog.AppendLine($"Failed to save purchase order. PO number: {po.PO}, Error msg: {responseBody}");
                                     vicServiceLog.Status = false;
-                                    vicServiceLog.VicResponse = msgForLog.ToString();
+                                    vicServiceLog.VicResponse = responseBody;
 
-                                    Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {msgForLog.ToString()}, stack trace: {ex.StackTrace}");
-
+                                    Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {msgForLog.ToString()}");
                                 }
-                                msgForLog.AppendLine($"Successfully add purchase order. PO number: {po.PO}.");
 
+
+                                vicServiceLog.InternalId = poResponse.InternalId;
+                                vicServiceLog.ObjectType = "Purchase Order";
+                                vicServiceLog.SourceType = sourceType;
+                                vicServiceLog.VicRequest = json;
+                                vicServiceLog.SentDate = USATimeModel.GetUSATime().ToString("MM-dd-yyyy hh:mm:ss tt");
+                                vicServiceLog.ExternalId = po.PO.ToString();
+                                vicServiceLog.Note = msgForLog.ToString();
+                                vicServiceLog.DestinationENV = env;
+
+                                // save vic service log
+                                _dal.SaveVicServiceLog(vicServiceLog);
                             }
-                            else
-                            {
-                                Console.WriteLine($"Gl number: {poResponse.PoNumber}");
-                                Console.WriteLine(response.ReasonPhrase);
-
-                                // error log
-                                var responseBody = await response.Content.ReadAsStringAsync();
-
-                                //var errors = JArray.Parse(responseBody);
-
-                                // error log
-                                msgForLog.AppendLine($"Failed to save purchase order. PO number: {po.PO}, Error msg: {responseBody}");
-                                vicServiceLog.Status = false;
-                                vicServiceLog.VicResponse = responseBody;
-
-                                Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {msgForLog.ToString()}");
-                            }
-
-
-                            vicServiceLog.InternalId = poResponse.InternalId;
-                            vicServiceLog.ObjectType = "Purchase Order";
-                            vicServiceLog.SourceType = sourceType;
-                            vicServiceLog.VicRequest = json;
-                            vicServiceLog.SentDate = USATimeModel.GetUSATime().ToString("MM-dd-yyyy hh:mm:ss tt");
-                            vicServiceLog.ExternalId = po.PO.ToString();
-                            vicServiceLog.Note = msgForLog.ToString();
-                            vicServiceLog.DestinationENV = env;
-
-                            // save vic service log
-                            _dal.SaveVicServiceLog(vicServiceLog);
+                        }
+                        catch (Exception ex) 
+                        {
+                            Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, Stack trace: {ex.StackTrace}");
+                            Utils.LogToFile(1, "[EXCEPTION]", $"Error msg from po: { poGroup.Key}");
                         }
 
                         

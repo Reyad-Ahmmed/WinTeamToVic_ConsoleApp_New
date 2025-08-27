@@ -29,8 +29,9 @@ namespace WinTeamToVic_ConsoleApp
                 var tokenForWinTeamUAT = await TokenService.GetUATTestVicAccessTokenForWinTeam();
                 var tokenForWinTeamUATProduction = await TokenService.GetUATTestVicAccessTokenForWinTeamProduction();
 
-                var tokenForTotalService = await TokenService.GetTestVicAccessTokenForTotalService(); // for test
-                var tokenForTotalServiceUAT = await TokenService.GetUATVicAccessTokenForTotalService(); // for uat
+                //var tokenForTotalService = await TokenService.GetTestVicAccessTokenForTotalService(); // for test
+                //var tokenForTotalServiceUAT = await TokenService.GetUATVicAccessTokenForTotalService(); // for uat
+                var tokenForTotalServicePROD = await TokenService.GetProductionVicAccessTokenForTotalService(); // prod
 
                 var winteamSource = ConfigurationManager.AppSettings["winTeamSource"];
                 var totalServiceSource = ConfigurationManager.AppSettings["totalServiceSource"];
@@ -43,13 +44,13 @@ namespace WinTeamToVic_ConsoleApp
                 // winteam uat
                 //await vicDataManagerService.WinTeamDataManagerForUAT(_uatEnv, winteamSource, tokenForWinTeamUAT);
 
-                await vicDataManagerService.WinTeamDataManagerForUAT(_prodEnv, winteamSource, tokenForWinTeamUATProduction);
+                //await vicDataManagerService.WinTeamDataManagerForUAT(_prodEnv, winteamSource, tokenForWinTeamUATProduction);
 
                 // total service test
                 //await vicDataManagerService.TotalServiceDataManagerForTest(_testEnv, totalServiceSource, tokenForTotalService);
 
                 // total service uat
-                await vicDataManagerService.TotalServiceDataManagerForUAT(_uatEnv, totalServiceSource, tokenForTotalServiceUAT);
+                await vicDataManagerService.TotalServiceDataManagerForUAT(_prodEnv, totalServiceSource, tokenForTotalServicePROD);
 
                 Console.WriteLine($"Application end time: {DateTime.Now.ToString("MM-dd-yyyy hh:mm:ss tt")}");
                 Utils.LogToFile(3, "[INFO]", $"Application end time: {DateTime.Now.ToString("MM-dd-yyyy hh:mm:ss tt")}");
@@ -58,7 +59,7 @@ namespace WinTeamToVic_ConsoleApp
             {
                 Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, stack trace: {ex.StackTrace}");
             }
-            //Console.ReadLine();
+            Console.ReadLine();
         }
     }
 }

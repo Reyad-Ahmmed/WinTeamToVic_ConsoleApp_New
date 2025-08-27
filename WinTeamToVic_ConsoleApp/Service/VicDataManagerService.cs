@@ -160,200 +160,209 @@ namespace WinTeamToVic_ConsoleApp.Service
 
                 foreach (var vendor in existingVendors)
                 {
-                    // Parse the JSON string into a JObject
-                    JObject jObject = JObject.Parse(vendor.VicRequest);
-
-                    // Remove a field
-                    jObject.Remove("externalUpdatedAt");
-
-                    // Convert back to string if needed
-                    string updatedJson = jObject.ToString();
-
-                    var existingVendor = JsonConvert.DeserializeObject<VendorRequestBodyModel>(updatedJson);
-
-                    var changeVendor = vendorList.Where(x => x.VendorNumber == int.Parse(existingVendor.ExternalId)).FirstOrDefault();
-
-                    // get single vendor
-                    var singleVendor = await _vicAiAPIService.GetSingleVendor(int.Parse(vendor.ExternalId));
-
-
-                    if (singleVendor != null)
+                    try
                     {
-                        var countryCodeObject = singleVendor.CustomFields.Where(x => x.FieldNumber == 2).FirstOrDefault();
-                        int countryCodeId = 0;
-                        countryCodeValue = "";
+                        // Parse the JSON string into a JObject
+                        JObject jObject = JObject.Parse(vendor.VicRequest);
 
-                        if (changeVendor != null)
+                        // Remove a field
+                        jObject.Remove("externalUpdatedAt");
+
+                        // Convert back to string if needed
+                        string updatedJson = jObject.ToString();
+
+                        var existingVendor = JsonConvert.DeserializeObject<VendorRequestBodyModel>(updatedJson);
+
+                        var changeVendor = vendorList.Where(x => x.VendorNumber == int.Parse(existingVendor.ExternalId)).FirstOrDefault();
+
+                        // get single vendor
+                        var singleVendor = await _vicAiAPIService.GetSingleVendor(int.Parse(vendor.ExternalId));
+
+
+                        if (singleVendor != null)
                         {
-                            if (countryCodeObject != null)
-                            {
-                                countryCodeId = int.Parse(countryCodeObject.Value);
-                                if (countryCodeId > 0)
-                                {
-                                    var vendorCountryCode = _winteamAPIService.GetCountryCodes(countryCodeId);
-                                    countryCodeValue = vendorCountryCode.ISOCode;
-                                }
-                            }
+                            var countryCodeObject = singleVendor.CustomFields.Where(x => x.FieldNumber == 2).FirstOrDefault();
+                            int countryCodeId = 0;
+                            countryCodeValue = "";
 
-                            if (
-                                changeVendor.VendorNumber.ToString() != existingVendor.ExternalId ||
-                                !string.Equals(changeVendor.VendorName, existingVendor.Name, StringComparison.OrdinalIgnoreCase) ||
-                                !string.Equals(changeVendor.Phone, existingVendor.Phone, StringComparison.OrdinalIgnoreCase) ||
-                                !string.Equals(changeVendor.Address?.Address1, existingVendor.AddressStreet, StringComparison.OrdinalIgnoreCase) ||
-                                !string.Equals(changeVendor.Address?.City, existingVendor.AddressCity, StringComparison.OrdinalIgnoreCase) ||
-                                !string.Equals(changeVendor.Address?.State, existingVendor.AddressState, StringComparison.OrdinalIgnoreCase) ||
-                                !string.Equals(changeVendor.Address?.Zip, existingVendor.AddressPostalCode, StringComparison.OrdinalIgnoreCase) ||
-                                !string.Equals(countryCodeValue.Trim(), existingVendor.CountryCode, StringComparison.OrdinalIgnoreCase) ||
-
-                                changeVendor.VendorStatus != existingVendor.State
-                            )
-                            {
-                                changeVendors.Add(changeVendor);
-                            }
-
-                        }
-
-
-                        // vendor tag update process
-                        var existingVendorTag = _vicAiAPIService.GetVendorTagByVendorNumber(environment, source, "Vendor Tag Assign", vendor.ExternalId);
-
-                        // get tag name by tag id
-                        var vendorTags = await _vicAiAPIService.GetVendorTags(token);
-
-
-                        if (existingVendorTag != null && !string.IsNullOrEmpty(existingVendorTag.ExternalId))
-                        {
-                            // parse request body data to object
-                            var vendorTagRequestBody = existingVendorTag.VicResponse;
-                            var vendorTagData = JsonConvert.DeserializeObject<VendorTagAssign>(vendorTagRequestBody);
-
-                            // get single tag
-                            var vendorTag = vendorTags.Where(x => x.Id.Trim() == vendorTagData?.TagId?.Trim()).FirstOrDefault();
-
-                            // get tag name
-                            var existingTagName = vendorTag?.Value.ToUpper();
-
-                            // vendor tag is updated or not
                             if (changeVendor != null)
                             {
-                                int? vendorNumber = changeVendor.VendorNumber;
+                                if (countryCodeObject != null)
+                                {
+                                    countryCodeId = int.Parse(countryCodeObject.Value);
+                                    if (countryCodeId > 0)
+                                    {
+                                        var vendorCountryCode = _winteamAPIService.GetCountryCodes(countryCodeId);
+                                        countryCodeValue = vendorCountryCode.ISOCode;
+                                    }
+                                }
 
-                                if (singleVendor.CustomFields.Count > 0)
+                                if (
+                                    changeVendor.VendorNumber.ToString() != existingVendor.ExternalId ||
+                                    !string.Equals(changeVendor.VendorName, existingVendor.Name, StringComparison.OrdinalIgnoreCase) ||
+                                    !string.Equals(changeVendor.Phone, existingVendor.Phone, StringComparison.OrdinalIgnoreCase) ||
+                                    !string.Equals(changeVendor.Address?.Address1, existingVendor.AddressStreet, StringComparison.OrdinalIgnoreCase) ||
+                                    !string.Equals(changeVendor.Address?.City, existingVendor.AddressCity, StringComparison.OrdinalIgnoreCase) ||
+                                    !string.Equals(changeVendor.Address?.State, existingVendor.AddressState, StringComparison.OrdinalIgnoreCase) ||
+                                    !string.Equals(changeVendor.Address?.Zip, existingVendor.AddressPostalCode, StringComparison.OrdinalIgnoreCase) ||
+                                    !string.Equals(countryCodeValue.Trim(), existingVendor.CountryCode, StringComparison.OrdinalIgnoreCase) ||
+
+                                    changeVendor.VendorStatus != existingVendor.State
+                                )
+                                {
+                                    changeVendors.Add(changeVendor);
+                                }
+
+                            }
+
+
+                            // vendor tag update process
+                            var existingVendorTag = _vicAiAPIService.GetVendorTagByVendorNumber(environment, source, "Vendor Tag Assign", vendor.ExternalId);
+
+                            // get tag name by tag id
+                            var vendorTags = await _vicAiAPIService.GetVendorTags(token);
+
+
+                            if (existingVendorTag != null && !string.IsNullOrEmpty(existingVendorTag.ExternalId))
+                            {
+                                // parse request body data to object
+                                var vendorTagRequestBody = existingVendorTag.VicResponse;
+                                var vendorTagData = JsonConvert.DeserializeObject<VendorTagAssign>(vendorTagRequestBody);
+
+                                // get single tag
+                                var vendorTag = vendorTags.Where(x => x.Id.Trim() == vendorTagData?.TagId?.Trim()).FirstOrDefault();
+
+                                // get tag name
+                                var existingTagName = vendorTag?.Value.ToUpper();
+
+                                // vendor tag is updated or not
+                                if (changeVendor != null)
+                                {
+                                    int? vendorNumber = changeVendor.VendorNumber;
+
+                                    if (singleVendor.CustomFields.Count > 0)
+                                    {
+                                        // get vendor tag
+                                        var vendorCustomFieldForTag = singleVendor.CustomFields.Where(x => x.FieldNumber == 1).FirstOrDefault();
+
+                                        if (vendorCustomFieldForTag != null)
+                                        {
+                                            var newTagId = vendorCustomFieldForTag.Value.Trim();
+
+
+                                            string newTagName = "";
+
+                                            if (int.TryParse(newTagId, out var id))
+                                            {
+                                                var singleVendorTag = _vendorTagService.GetVendorTag(id);
+                                                newTagName = singleVendorTag?.Description?.ToUpper();
+                                            }
+                                            else
+                                            {
+                                                Utils.LogToFile(3, "[INFO]", $"Invalid tag id. Return value: {newTagId}");
+                                                Console.WriteLine($"Invalid tag ID format: {newTagId}");
+
+                                                newTagName = vendorCustomFieldForTag.Value.Trim();
+                                            }
+
+
+                                            //var singleVendorTag = _vendorTagService.GetVendorTag(int.Parse(newTagId));
+                                            //var newTagName = singleVendorTag?.Description?.ToUpper();
+
+                                            // get single tag
+                                            var newVendorTag = vendorTags.Where(x => x.Value.Trim() == newTagName).FirstOrDefault();
+
+
+                                            // if updated then delete tag
+                                            if (existingTagName != newTagName)
+                                            {
+                                                Utils.LogToFile(3, "[INFO]", $"Vendor tag wasn't match.");
+
+                                                var tagId = newVendorTag.Id.Trim();
+
+                                                // delete previous tag
+                                                var isDeleted = await _vicAiAPIService.DeleteVendorTag(token, existingVendorTag.InternalId, vendorNumber);
+
+                                                if (isDeleted == 1)
+                                                {
+                                                    // assign vendor tag
+                                                    await _vicAiAPIService.VendorTagAssign(token, source, environment, vendorNumber, vendor.InternalId, tagId, 1);
+                                                }
+
+                                            }
+                                            else
+                                            {
+                                                Utils.LogToFile(3, "[INFO]", $"Vendor tag was not change. Vendor number: {vendorNumber}");
+                                            }
+                                        }
+                                    }
+                                }
+
+                            }
+                            else
+                            {
+                                Utils.LogToFile(3, "[INFO]", $"Vendor tag not found. Vendor number: {vendor.ExternalId}");
+
+                                // create new tag and assign to vendor
+                                int? vendorNumber = int.Parse(vendor.ExternalId);
+
+                                if (singleVendor != null && singleVendor.CustomFields.Count > 0)
                                 {
                                     // get vendor tag
                                     var vendorCustomFieldForTag = singleVendor.CustomFields.Where(x => x.FieldNumber == 1).FirstOrDefault();
 
                                     if (vendorCustomFieldForTag != null)
                                     {
-                                        var newTagId = vendorCustomFieldForTag.Value.Trim();
+                                        var tagIdFromWinTeam = vendorCustomFieldForTag.Value.Trim();
 
+                                        string tag = "";
 
-                                        string newTagName = "";
-
-                                        if (int.TryParse(newTagId, out var id))
+                                        if (int.TryParse(tagIdFromWinTeam, out var id))
                                         {
                                             var singleVendorTag = _vendorTagService.GetVendorTag(id);
-                                            newTagName = singleVendorTag?.Description?.ToUpper();
+                                            tag = singleVendorTag?.Description?.ToUpper();
                                         }
                                         else
                                         {
-                                            Utils.LogToFile(3, "[INFO]", $"Invalid tag id. Return value: {newTagId}");
-                                            Console.WriteLine($"Invalid tag ID format: {newTagId}");
+                                            Utils.LogToFile(3, "[INFO]", $"Invalid tag id. Return value: {tagIdFromWinTeam}");
+                                            Console.WriteLine($"Invalid tag ID format: {tagIdFromWinTeam}");
 
-                                            newTagName = vendorCustomFieldForTag.Value.Trim();
+                                            tag = vendorCustomFieldForTag.Value.Trim();
                                         }
 
+                                        // already have this tag
+                                        var existingTag = vendorTags.Where(x => x.Value.ToUpper().Trim() == tag.Trim()).FirstOrDefault();
 
-                                        //var singleVendorTag = _vendorTagService.GetVendorTag(int.Parse(newTagId));
-                                        //var newTagName = singleVendorTag?.Description?.ToUpper();
-
-                                        // get single tag
-                                        var newVendorTag = vendorTags.Where(x => x.Value.Trim() == newTagName).FirstOrDefault();
-
-
-                                        // if updated then delete tag
-                                        if (existingTagName != newTagName)
+                                        if (existingTag == null)
                                         {
-                                            Utils.LogToFile(3, "[INFO]", $"Vendor tag wasn't match.");
+                                            // new tag create.
+                                            var vendorTagAfterSave = await _vicAiAPIService.AddVendorForWinTeamToVicUAT(token, tag, source, environment, vendorNumber);
 
-                                            var tagId = newVendorTag.Id.Trim();
-
-                                            // delete previous tag
-                                            var isDeleted = await _vicAiAPIService.DeleteVendorTag(token, existingVendorTag.InternalId, vendorNumber);
-
-                                            if (isDeleted == 1)
-                                            {
-                                                // assign vendor tag
-                                                await _vicAiAPIService.VendorTagAssign(token, source, environment, vendorNumber, vendor.InternalId, tagId, 1);
-                                            }
-
+                                            // assign vendor tag
+                                            await _vicAiAPIService.VendorTagAssign(token, source, environment, vendorNumber, vendor.InternalId, vendorTagAfterSave.Id, 1);
                                         }
                                         else
                                         {
-                                            Utils.LogToFile(3, "[INFO]", $"Vendor tag was not change. Vendor number: {vendorNumber}");
+                                            // assign vendor tag
+                                            await _vicAiAPIService.VendorTagAssign(token, source, environment, vendorNumber, vendor.InternalId, existingTag.Id, 1);
                                         }
                                     }
-                                }
-                            }
 
+                                }
+
+                            }
                         }
                         else
                         {
-                            Utils.LogToFile(3, "[INFO]", $"Vendor tag not found. Vendor number: {vendor.ExternalId}");
-
-                            // create new tag and assign to vendor
-                            int? vendorNumber = int.Parse(vendor.ExternalId);
-
-                            if (singleVendor != null && singleVendor.CustomFields.Count > 0)
-                            {
-                                // get vendor tag
-                                var vendorCustomFieldForTag = singleVendor.CustomFields.Where(x => x.FieldNumber == 1).FirstOrDefault();
-
-                                if (vendorCustomFieldForTag != null)
-                                {
-                                    var tagIdFromWinTeam = vendorCustomFieldForTag.Value.Trim();
-
-                                    string tag = "";
-
-                                    if (int.TryParse(tagIdFromWinTeam, out var id))
-                                    {
-                                        var singleVendorTag = _vendorTagService.GetVendorTag(id);
-                                        tag = singleVendorTag?.Description?.ToUpper();
-                                    }
-                                    else
-                                    {
-                                        Utils.LogToFile(3, "[INFO]", $"Invalid tag id. Return value: {tagIdFromWinTeam}");
-                                        Console.WriteLine($"Invalid tag ID format: {tagIdFromWinTeam}");
-
-                                        tag = vendorCustomFieldForTag.Value.Trim();
-                                    }
-
-                                    // already have this tag
-                                    var existingTag = vendorTags.Where(x => x.Value.ToUpper().Trim() == tag.Trim()).FirstOrDefault();
-
-                                    if (existingTag == null)
-                                    {
-                                        // new tag create.
-                                        var vendorTagAfterSave = await _vicAiAPIService.AddVendorForWinTeamToVicUAT(token, tag, source, environment, vendorNumber);
-
-                                        // assign vendor tag
-                                        await _vicAiAPIService.VendorTagAssign(token, source, environment, vendorNumber, vendor.InternalId, vendorTagAfterSave.Id, 1);
-                                    }
-                                    else
-                                    {
-                                        // assign vendor tag
-                                        await _vicAiAPIService.VendorTagAssign(token, source, environment, vendorNumber, vendor.InternalId, existingTag.Id, 1);
-                                    }
-                                }
-
-                            }
-
+                            Utils.LogToFile(1, "[EXCEPTION]", $"Get single vendor function was null here. Vendor number: {vendor.ExternalId}");
                         }
                     }
-                    else
+                    catch(Exception ex)
                     {
-                        Utils.LogToFile(1, "[EXCEPTION]", $"Get single vendor function was null here. Vendor number: {vendor.ExternalId}");
+                        Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, Stack trace: {ex.StackTrace}");
+                        Utils.LogToFile(1, "[EXCEPTION]", $"Error msg from vendor: {vendor.ExternalId}");
                     }
+                    
                 }
 
 
@@ -380,31 +389,40 @@ namespace WinTeamToVic_ConsoleApp.Service
 
                 foreach (var job in existingJobs)
                 {
-                    // Parse the JSON string into a JObject
-                    JObject jObject = JObject.Parse(job.VicRequest);
-
-                    // Remove a field
-                    jObject.Remove("externalUpdatedAt");
-
-                    // Convert back to string if needed
-                    string updatedJson = jObject.ToString();
-
-                    var existingJob = JsonConvert.DeserializeObject<JobRequestBodyModel>(updatedJson);
-
-                    var changeJob = jobList.Where(x => x.JobNumber == existingJob.Name).FirstOrDefault();
-
-                    if (changeJob != null)
+                    try
                     {
+                        // Parse the JSON string into a JObject
+                        JObject jObject = JObject.Parse(job.VicRequest);
 
-                        if (
-                            changeJob.JobNumber.ToString() != existingJob.Name ||
-                            !string.Equals(changeJob.JobDescription, existingJob.ShortName, StringComparison.OrdinalIgnoreCase)
-                        )
+                        // Remove a field
+                        jObject.Remove("externalUpdatedAt");
+
+                        // Convert back to string if needed
+                        string updatedJson = jObject.ToString();
+
+                        var existingJob = JsonConvert.DeserializeObject<JobRequestBodyModel>(updatedJson);
+
+                        var changeJob = jobList.Where(x => x.JobNumber == existingJob.Name).FirstOrDefault();
+
+                        if (changeJob != null)
                         {
-                            changeJobs.Add(changeJob);
-                        }
 
+                            if (
+                                changeJob.JobNumber.ToString() != existingJob.Name ||
+                                !string.Equals(changeJob.JobDescription, existingJob.ShortName, StringComparison.OrdinalIgnoreCase)
+                            )
+                            {
+                                changeJobs.Add(changeJob);
+                            }
+
+                        }
                     }
+                    catch (Exception ex) 
+                    {
+                        Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, Stack trace: {ex.StackTrace}");
+                        Utils.LogToFile(1, "[EXCEPTION]", $"Error msg from job: {job.ExternalId}");
+                    }
+                    
 
                 }
 
@@ -433,9 +451,9 @@ namespace WinTeamToVic_ConsoleApp.Service
                     .Where(x => x.DoNotSend == 0)
                     .ToList();
 
-                var deleteGLList = existingGls
-                    .Where(x => x.DoNotSend == 3)
-                    .ToList();
+                //var deleteGLList = existingGls
+                //    .Where(x => x.DoNotSend == 3)
+                //    .ToList();
 
                 // Compare
                 var changeGLs = new List<GLModel>();
@@ -472,7 +490,8 @@ namespace WinTeamToVic_ConsoleApp.Service
                     }
                     catch (Exception ex)
                     {
-                        Utils.LogToFile(1, "[INFO]", $"Error msg: {ex.Message}, Stack trace: {ex.StackTrace}, GL number: {gl.ExternalId}");
+                        Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, Stack trace: {ex.StackTrace}");
+                        Utils.LogToFile(1, "[EXCEPTION]", $"Error msg from gl: {gl.ExternalId}");
                     }
                 }
 
@@ -522,36 +541,44 @@ namespace WinTeamToVic_ConsoleApp.Service
 
                 foreach (var vendor in existingVendors)
                 {
-                    // Parse the JSON string into a JObject
-                    JObject jObject = JObject.Parse(vendor.VicRequest);
-
-                    // Remove a field
-                    jObject.Remove("externalUpdatedAt");
-
-                    // Convert back to string if needed
-                    string updatedJson = jObject.ToString();
-
-                    var existingVendor = JsonConvert.DeserializeObject<VendorRequestBodyModel>(updatedJson);
-
-                    var changeVendor = vendors.Where(x => x.VendorNumber == existingVendor.ExternalId).FirstOrDefault();
-
-                    if (changeVendor != null)
+                    try
                     {
+                        // Parse the JSON string into a JObject
+                        JObject jObject = JObject.Parse(vendor.VicRequest);
 
-                        if (
-                            changeVendor.VendorNumber.ToString() != existingVendor.ExternalId ||
-                            !string.Equals(changeVendor.VendorName, existingVendor.Name, StringComparison.OrdinalIgnoreCase) ||
-                            !string.Equals(changeVendor.Phone, existingVendor.Phone) ||
-                            !string.Equals(changeVendor.Address, existingVendor.AddressStreet, StringComparison.OrdinalIgnoreCase) ||
-                            !string.Equals(changeVendor.City, existingVendor.AddressCity, StringComparison.OrdinalIgnoreCase) ||
-                            !string.Equals(changeVendor.State, existingVendor.AddressState, StringComparison.OrdinalIgnoreCase) ||
-                            !string.Equals(changeVendor.Zip, existingVendor.AddressPostalCode, StringComparison.OrdinalIgnoreCase) ||
-                            !string.Equals(changeVendor.CountryCode, existingVendor.CountryCode, StringComparison.OrdinalIgnoreCase)
-                        )
+                        // Remove a field
+                        jObject.Remove("externalUpdatedAt");
+
+                        // Convert back to string if needed
+                        string updatedJson = jObject.ToString();
+
+                        var existingVendor = JsonConvert.DeserializeObject<VendorRequestBodyModel>(updatedJson);
+
+                        var changeVendor = vendors.Where(x => x.VendorNumber == existingVendor.ExternalId).FirstOrDefault();
+
+                        if (changeVendor != null)
                         {
-                            changeVendors.Add(changeVendor);
-                        }
 
+                            if (
+                                changeVendor.VendorNumber.ToString() != existingVendor.ExternalId ||
+                                !string.Equals(changeVendor.VendorName, existingVendor.Name, StringComparison.OrdinalIgnoreCase) ||
+                                !string.Equals(changeVendor.Phone, existingVendor.Phone) ||
+                                !string.Equals(changeVendor.Address, existingVendor.AddressStreet, StringComparison.OrdinalIgnoreCase) ||
+                                !string.Equals(changeVendor.City, existingVendor.AddressCity, StringComparison.OrdinalIgnoreCase) ||
+                                !string.Equals(changeVendor.State, existingVendor.AddressState, StringComparison.OrdinalIgnoreCase) ||
+                                !string.Equals(changeVendor.Zip, existingVendor.AddressPostalCode, StringComparison.OrdinalIgnoreCase) ||
+                                !string.Equals(changeVendor.CountryCode, existingVendor.CountryCode, StringComparison.OrdinalIgnoreCase)
+                            )
+                            {
+                                changeVendors.Add(changeVendor);
+                            }
+
+                        }
+                    }
+                    catch(Exception ex)
+                    {
+                        Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, Stack trace: {ex.StackTrace}.");
+                        Utils.LogToFile(1, "[EXCEPTION]", $"Error msg from vendor: {vendor.ExternalId}");
                     }
 
                 }
@@ -584,31 +611,39 @@ namespace WinTeamToVic_ConsoleApp.Service
 
                 foreach (var job in existingJobs)
                 {
-                    // Parse the JSON string into a JObject
-                    JObject jObject = JObject.Parse(job.VicRequest);
-
-                    // Remove a field
-                    jObject.Remove("externalUpdatedAt");
-
-                    // Convert back to string if needed
-                    string updatedJson = jObject.ToString();
-
-                    var existingJob = JsonConvert.DeserializeObject<JobRequestBodyModel>(updatedJson);
-
-
-                    var changeJob = jobs.Where(x => x.ID == int.Parse(existingJob.Name)).FirstOrDefault();
-
-                    if (changeJob != null)
+                    try
                     {
+                        // Parse the JSON string into a JObject
+                        JObject jObject = JObject.Parse(job.VicRequest);
 
-                        if (
-                            changeJob.ID.ToString().Trim() != existingJob.Name.Trim() ||
-                            !string.Equals(changeJob.JobDescription.Trim(), existingJob.ShortName.Trim(), StringComparison.OrdinalIgnoreCase)
-                        )
+                        // Remove a field
+                        jObject.Remove("externalUpdatedAt");
+
+                        // Convert back to string if needed
+                        string updatedJson = jObject.ToString();
+
+                        var existingJob = JsonConvert.DeserializeObject<JobRequestBodyModel>(updatedJson);
+
+
+                        var changeJob = jobs.Where(x => x.ID == int.Parse(existingJob.Name)).FirstOrDefault();
+
+                        if (changeJob != null)
                         {
-                            changeJobs.Add(changeJob);
-                        }
 
+                            if (
+                                changeJob.ID.ToString().Trim() != existingJob.Name.Trim() ||
+                                !string.Equals(changeJob.JobDescription.Trim(), existingJob.ShortName.Trim(), StringComparison.OrdinalIgnoreCase)
+                            )
+                            {
+                                changeJobs.Add(changeJob);
+                            }
+
+                        }
+                    }
+                    catch (Exception ex) 
+                    {
+                        Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, Stack trace: {ex.StackTrace}");
+                        Utils.LogToFile(1, "[EXCEPTION]", $"Error msg from job: {job.ExternalId}");
                     }
 
                 }
@@ -640,32 +675,40 @@ namespace WinTeamToVic_ConsoleApp.Service
 
                 foreach (var gl in existingGls)
                 {
-                    // Parse the JSON string into a JObject
-                    JObject jObject = JObject.Parse(gl.VicRequest);
-
-                    // Remove a field
-                    jObject.Remove("externalUpdatedAt");
-
-                    // Convert back to string if needed
-                    string updatedJson = jObject.ToString();
-
-                    var existingGL = JsonConvert.DeserializeObject<GLRequestBodyModel>(updatedJson);
-
-                    var changegl = glAccounts.Where(x => x.GLAccountNumber == existingGL.Number).FirstOrDefault();
-
-                    if (changegl != null)
+                    try
                     {
+                        // Parse the JSON string into a JObject
+                        JObject jObject = JObject.Parse(gl.VicRequest);
 
-                        if (
-                            changegl.GLAccountNumber.ToString() != existingGL.Number ||
-                            !string.Equals(changegl.GLAccountDescription, existingGL.Name, StringComparison.OrdinalIgnoreCase)
-                        )
+                        // Remove a field
+                        jObject.Remove("externalUpdatedAt");
+
+                        // Convert back to string if needed
+                        string updatedJson = jObject.ToString();
+
+                        var existingGL = JsonConvert.DeserializeObject<GLRequestBodyModel>(updatedJson);
+
+                        var changegl = glAccounts.Where(x => x.GLAccountNumber == existingGL.Number).FirstOrDefault();
+
+                        if (changegl != null)
                         {
-                            changeGLs.Add(changegl);
+
+                            if (
+                                changegl.GLAccountNumber.ToString() != existingGL.Number ||
+                                !string.Equals(changegl.GLAccountDescription, existingGL.Name, StringComparison.OrdinalIgnoreCase)
+                            )
+                            {
+                                changeGLs.Add(changegl);
+                            }
+
                         }
-
                     }
-
+                    catch(Exception ex)
+                    {
+                        Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, Stack trace: {ex.StackTrace}");
+                        Utils.LogToFile(1, "[EXCEPTION]", $"Error msg from gl: {gl.ExternalId}");
+                    }
+                    
                 }
 
 
@@ -775,6 +818,7 @@ namespace WinTeamToVic_ConsoleApp.Service
                     catch (Exception ex)
                     {
                         Utils.LogToFile(1, "[EXCEPTION]", $"Error msg: {ex.Message}, Stack trace: {ex.StackTrace}");
+                        Utils.LogToFile(1, "[EXCEPTION]", $"Error msg from PO: {po.ExternalId}");
                     }
 
                 }
